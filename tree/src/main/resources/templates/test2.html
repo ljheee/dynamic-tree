@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title> 部门组织架构树</title>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+
+    <link rel="stylesheet" href="css/demo.css" type="text/css">
+    <link rel="stylesheet" href="css/zTreeStyle/zTreeStyle.css" type="text/css">
+    <script type="text/javascript" src="/js/jquery-3.2.1.min.js"></script>
+    <script type="text/javascript" src="/js/jquery.ztree.core.js"></script>
+    <script type="text/javascript" src="/js/jquery.ztree.excheck.js"></script>
+    <script type="text/javascript" src="/js/jquery.ztree.exedit.js"></script>
+
+
+
+    <style type="text/css">
+        .ztree li span.button.add {
+            margin-left:2px; margin-right: -1px; background-position:-144px 0; vertical-align:top; *vertical-align:middle
+        }
+    </style>
+    <script>
+        var zTree;
+        var treeNodes;
+
+        var setting = {
+            async: {
+                enable: true,
+                url:"/childDepts",
+                autoParam:["deptId"],
+                type: "get",
+            },
+
+            view: {
+                addHoverDom: addHoverDom,
+                removeHoverDom: removeHoverDom,
+                selectedMulti: false
+            },
+            edit: {
+                enable: true,
+                editNameSelectAll: true,
+            },
+            data: {
+                simpleData: {
+                    enable: true,
+                    idKey: "deptId",
+                    pIdKey: "parentId"
+                },
+                key: {
+                    name: "deptName",
+                }
+            },
+
+
+            callback: {
+                onAsyncSuccess : onAsyncSuccess,
+
+//                控制拖拽的回调函数
+                beforeDrag: beforeDrag,
+                beforeDrop: beforeDrop,
+                onDrop: onDrop,
+
+                //控制删除
+                beforeRemove: beforeRemove,
+                onRemove: onRemove,
+
+                beforeRename: beforeRename,
+                onRename: onRename,
+
+                beforeClick: beforeClick,
+                onClick: onClick,
+            }
+        };
+
+
+
+        function beforeClick(treeId, treeNode, clickFlag) {
+//            return true;
+            return (treeNode.click != false);
+        }
+
+        function onClick(event, treeId, treeNode, clickFlag) {
+            var zTree = $.fn.zTree.getZTreeObj("treeDemo");
+            alert("onClick--"+treeNode.deptId);
+
+                if(treeNode.children == null){
+                    $.ajax({
+                        url: '/childDepts/'+treeNode.deptId,
+                        type: 'get',
+                        dataType: 'json',
+                        success: function (data) {
+                            zTree.addNodes(treeNode , data);//在当前节点下，追加其子节点
+//                            zTree.showNodes(treeNode.children);
+//                            zTree.reAsyncChildNodes(treeNode,"refresh",false);
+                        }
+                    });
+                }
+
+        }
+        function onAsyncSuccess(event, treeId, treeNode, msg) {
+            var zTree = $.fn.zTree.getZTreeObj("treeDemo");
+            alert("haha!")
+            zTree.updateNode(treeNodes); // 异步加载成功后刷新树节点
+        }
+
+        function beforeDrag(treeId, treeNodes) {
+            for (var i=0,l=treeNodes.length; i<l; i++) {
+                if (treeNodes[i].drag === false) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        //拖拽之前，只能移动到其他节点之下。
+        function beforeDrop(treeId, treeNodes, targetNode, moveType) {
+            return targetNode ? targetNode.drop !== false : true;
+        }
+
+        function onDrop(event, treeId, treeNodes, targetNode, moveType, isCopy){
+            if(targetNode != null && moveType == "inner" && isCopy == false){
+                $.ajax({
+                    url: '/dept/'+treeNodes[0].deptId,
+                    type: 'put',
+                    data: {
+                        "deptName": treeNodes[0].deptName,
+                        "parentId": targetNode.deptId,
+                    },
+                    dataType: 'json',
+                    success: function () {
+                        alert("drop success!");
+                    },
+                    fail: function () {
+                        alert("drop fail!");
+                    }
+                });
+            }
+
+        }
+        //删除之前
+        function beforeRemove(treeId, treeNode) {
+            var zTree = $.fn.zTree.getZTreeObj("treeDemo");
+            zTree.selectNode(treeNode);
+            return confirm("确认删除节点 -- " + treeNode.deptName + " 吗？");
+        }
+
+        //删除
+        function onRemove(event, treeId, treeNode) {
+//            var deptId = treeNode.
+            $.ajax({
+                url: '/depts/'+treeNode.deptId,
+                type: 'delete',
+                dataType: 'json',
+                success: function () {
+                    alert("deleted success!")
+                }
+            });
+        }
+
+        function beforeRename(treeId, treeNode, newName, isCancel) {
+            if (newName.length == 0) {
+                setTimeout(function() {
+                    var zTree = $.fn.zTree.getZTreeObj("treeDemo");
+                    zTree.cancelEditName();
+                    alert("节点名称不能为空.");
+                }, 0);
+                return false;
+            }
+            return true;
+        }
+
+        //重命名
+        function onRename(event, treeId, treeNode, isCancel) {
+            //alert(treeNode.deptId)
+            $.ajax({
+                url: '/dept/'+treeNode.deptId ,
+                type: 'put',
+                data: {
+                    "deptName": treeNode.deptName,
+                    "parentId": treeNode.parentId
+                },
+                dataType: 'json',
+                success: function () {
+                   alert("rename success!");
+                }
+            });
+        }
+
+        //增加一个新节点
+        var newCount = 1;
+        function addHoverDom(treeId, treeNode) {
+            var sObj = $("#" + treeNode.tId + "_span");
+            if (treeNode.editNameFlag || $("#addBtn_"+treeNode.tId).length>0) return;
+            var addStr = "<span class='button add' id='addBtn_" + treeNode.tId
+                + "' title='add node' onfocus='this.blur();'></span>";
+            sObj.after(addStr);
+            var btn = $("#addBtn_"+treeNode.tId);
+
+            if (btn) btn.bind("click", function(){
+                var zTree = $.fn.zTree.getZTreeObj("treeDemo");
+               // zTree.addNodes(treeNode, {id:(100 + newCount), pId:treeNode.id, name:"new node" + (newCount++)});
+                $.ajax({
+                    url: '/dept',
+                    type: 'post',
+                    data: {
+                        "deptName": "newNode" + (newCount++),
+                        "parentId": treeNode.deptId
+                    },
+
+                    success: function (data) {
+                        var newID= data.deptId;
+                        zTree.addNodes(treeNode, {id:newID, pId:treeNode.deptId, name:"newNode" });
+                        var node = zTree.getNodeByParam("id", newID, null); //根据新的id找到新添加的节点
+                        zTree.selectNode(node); //让新添加的节点处于选中状态
+
+                       // zTree.reAsyncChildNodes(treeNode, "refresh" , false);
+                        //zTree.updateNode(treeNode);
+                       // alert("add success!");
+                    }
+                });
+
+                return false;
+            });
+        };
+
+        /**
+         * 刷新当前节点
+         */
+        function refreshNode() {
+            /*根据 treeId 获取 zTree 对象*/
+            var zTree = $.fn.zTree.getZTreeObj("treeDemo"),
+                type = "refresh",
+                silent = false,
+                /*获取 zTree 当前被选中的节点数据集合*/
+                nodes = zTree.getSelectedNodes();
+            /*强行异步加载父节点的子节点。[setting.async.enable = true 时有效]*/
+            zTree.reAsyncChildNodes(nodes[0], type, silent);
+        }
+
+        function removeHoverDom(treeId, treeNode) {
+            $("#addBtn_"+treeNode.tId).unbind().remove();
+        };
+
+
+
+        $.ajax({
+            async : false,
+            cache:false,
+            type: 'GET',
+            dataType : "json",
+            url: '/deptRoot',//请求的action路径
+            error: function () {//请求失败处理函数
+                alert('请求失败');
+            },
+            success:function(data){ //请求成功后处理函数。
+//                alert(data);
+                treeNodes = data;   //把后台封装好的简单Json格式赋给treeNodes
+            }
+        });
+
+
+        $(document).ready(function () {
+            $.fn.zTree.init($("#treeDemo"), setting, treeNodes);
+        });
+    </script>
+</head>
+<body>
+    <h1 style="text-align: center">部门组织架构树</h1>
+    <div style="position:absolute;   top:10%; left:42%; ">
+        <ul class="ztree" id="treeDemo"></ul>
+    </div>
+</body>
+</html>
